@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "model_name": "eenet34_1525",
+    "device": "cpu",
+    "threads": 1,
+    "input_shape": [
+      1,
+      3,
+      32,
+      32
+    ],
+    "warmup": 30,
+    "repeats": 200,
+    "statistic": "median",
+    "reference_cpu_speed": 2000000000.0,
+    "torch_version": "2.14.1+cu130",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "processor": "x86_64"
+  },
+  "exits": {
+    "15": {
+      "inference_time_s": 0.00811793,
+      "equivalent_cycles": 16235860.000000002
+    },
+    "25": {
+      "inference_time_s": 0.014579433,
+      "equivalent_cycles": 29158866.0
+    },
+    "34": {
+      "inference_time_s": 0.0230105325,
+      "equivalent_cycles": 46021065.0
+    }
+  }
+}

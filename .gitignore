@@ -1,0 +1,7 @@
+/data
+/results
+/src/__pycache__
+/simulations/__pycache__
+/saved_models
+/.venv
+README.md

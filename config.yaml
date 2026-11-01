@@ -1,0 +1,22 @@
+training:
+  batch_size: 128
+  epochs: 3
+  lr: 0.1   # {SGD: 0.1, Adam: 0.001}
+  optim_name: SGD   # SGD or Adam
+  model_name: eenet20_half   # [resnet18, resnet34, eenet34]
+  dataset_name: CIFAR10   # [MNIST, CIFAR10, CIFAR100]
+
+FL:
+  global_rounds: 30
+  num_clients: 10
+  dirichlet: 0.5   # [0.1, 1e20]
+  ite_num: 1
+  cohort: 10
+
+communication:
+  performance_ratios: [0.5, 1.0, 2.0]
+  total_bandwidth: 40000000
+  power_dbm: 23.0  # dbm
+  noise_w: 1.0e-10
+  channel_seed: 0
+  gamma: 30.0
