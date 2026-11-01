@@ -19,13 +19,14 @@ from .dataset import (
 )
 from .models import MODEL_SPECS
 from .server import federated_learning
-from .utils import load_config, select_optimizer, set_seed
+from .utils import choose_clients, load_config, select_optimizer, set_seed
 from .round_resources import (
     count_exit_flops,
     make_environment,
     plan_round,
     gamma_boundary,
 )
+from .communication import transmit_update
 
 
 def full_state(model):
@@ -54,7 +55,7 @@ def main():
     )
     parser.add_argument(
         "--method",
-        choices=("A", "B", "C", "D"),
+        choices=("A", "B", "C", "D", "E"),
         required=True,
     )
     parser.add_argument(
@@ -93,13 +94,11 @@ def main():
     if training["dataset_name"] != "CIFAR10":
         raise ValueError("この実験ではCIFAR10を使用します")
 
-    if fl["num_clients"] != 20 or fl["cohort"] != 20:
-        raise ValueError("全20端末が参加する設定にしてください")
-
     if fl["ite_num"] != 1:
         raise ValueError("この実行ファイルは1回につき1試行です")
 
     num_clients = fl["num_clients"]
+    cohort = fl["cohort"]
     rounds = fl["global_rounds"]
     batch_size = training["batch_size"]
     epochs = training["epochs"]
@@ -143,6 +142,10 @@ def main():
     global_model = spec["factory"](
         num_classes=10
     ).to(device)
+
+    parameter_names = {
+    name for name, _ in global_model.named_parameters()
+    }
 
     initial = full_state(global_model)
     flops = count_exit_flops(global_model)
@@ -201,6 +204,12 @@ def main():
         args.seed,
     )
 
+    set_seed(400000 + args.seed)
+    selected_clients = [
+        choose_clients(num_clients, cohort)
+        for _ in range(rounds)
+    ]
+
     """
     plans = [
         (choices, bandwidth, updated, eta),  # 第1ラウンド
@@ -211,8 +220,8 @@ def main():
     plans = [
         plan_round(
             args.method,
-            comp,
-            channels[t],
+            comp[selected_clients[t]],
+            channels[t, selected_clients[t]],
             float(noises[t]),
             power,
             size_bits,
@@ -450,6 +459,11 @@ def main():
 
     for t, plan in enumerate(plans, start=1):
         choices, bandwidth, updated, eta = plan
+        participants = selected_clients[t - 1]
+        positions = {client: index for index, client in enumerate(participants)}
+
+        uplink_mses = {}
+        uplink_mse = np.nan
 
         if updated:
             # 同じ物理ラウンドでは、手法間で学習乱数を揃える
@@ -475,7 +489,7 @@ def main():
                 global_model, prefixes
             )
 
-            for i in range(num_clients):
+            for i in participants:
                 local_model = copy.deepcopy(global_model)
                 local_model.load_state_dict(
                     client_states[i],
@@ -503,9 +517,28 @@ def main():
 
                 client_states[i] = full_state(local_model)
 
-                updates.append(
-                    shared_state(local_model, prefixes)
+                local_shared = shared_state(
+                    local_model, prefixes
                 )
+
+                if args.method in ("A", "B", "C", "D"):
+                    received_shared, client_mse = transmit_update(
+                        local_state=local_shared,
+                        reference_state=current_shared,
+                        parameter_names=parameter_names,
+                        channel_gain=channels[t - 1, i],
+                        power_w=power,
+                        noise_w=float(noises[t - 1]),
+                        seed=[args.seed, t, i, 500000],
+                    )
+                else:
+                    # Eなど、Error Free手法を追加している場合。
+                    received_shared = local_shared
+                    client_mse = 0.0
+
+                uplink_mses[i] = client_mse
+
+                updates.append(received_shared)
                 """
                 updates = [
                     端末0の学習後の共有部分,
@@ -517,14 +550,18 @@ def main():
             federated_learning(
                 updates,
                 global_model,
-                sample_counts.tolist(),
+                sample_counts[participants].tolist(),
+            )
+
+            uplink_mse = float(
+                np.mean(list(uplink_mses.values()))
             )
 
             new_shared = shared_state(
                 global_model, prefixes
             )
 
-            for i in range(num_clients):
+            for i in participants:
                 personal_model = copy.deepcopy(global_model)
                 personal_model.load_state_dict(
                     client_states[i],
@@ -555,10 +592,8 @@ def main():
                     personal_model
                 )
 
-            evaluation_exits = [
-                exits[int(choice) - 1]
-                for choice in choices
-            ]
+                for position, i in enumerate(participants):
+                    evaluation_exits[i] = exits[int(choices[position]) - 1]
 
             last_accuracies = evaluate_clients()
             exit_sum = int(np.sum(choices))
@@ -575,43 +610,51 @@ def main():
             "skipped": not bool(updated),
             "exit_index_sum": exit_sum,
             "noise_w": float(noises[t - 1]),
+            "uplink_mse": uplink_mse,
         })
 
         for i in range(num_clients):
+            position = positions.get(i)
             candidate = (
-                int(choices[i])
-                if choices is not None
+                int(choices[position])
+                if position is not None and choices is not None
                 else None
             )
 
             b = (
-                float(bandwidth[i])
-                if bandwidth is not None
+                float(bandwidth[position])
+                if position is not None and bandwidth is not None
                 else np.nan
             )
 
-            # 選択Exitでの計算時間
+            # tc: 選択Exitでの計算時間
             tc = (
                 float(comp[i, candidate - 1])
                 if candidate is not None
                 else np.nan
             )
 
-            # 通信時間 [s]
-            tt = (
-                size_bits / (b * eta[i])
-                if (
-                    np.isfinite(b)
-                    and b > 0
-                    and eta[i] > 0
+            # tt: 通信時間 [s]
+            if args.method == "E":
+                tt = 0.0 if position is not None else np.nan
+
+            else:
+                tt = (
+                    size_bits / (b * eta[position])
+                    if (
+                        position is not None
+                        and np.isfinite(b)
+                        and b > 0
+                        and eta[position] > 0
+                    )
+                    else np.nan
                 )
-                else np.nan
-            )
 
             conditions.append({
                 "seed": args.seed,
                 "round": t,
                 "client": i,
+                "selected": bool(updated) and position is not None,
                 "updated": bool(updated),
                 "distance_m": float(distances[i]),
                 "cpu_hz": float(cpu_hz[i]),
@@ -632,6 +675,7 @@ def main():
                 "computation_s": tc,
                 "transmission_s": tt,
                 "total_s": tc + tt,
+                "uplink_mse": uplink_mses.get(i, np.nan)
             })
 
         pd.DataFrame(history).to_csv(

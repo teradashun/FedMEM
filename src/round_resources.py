@@ -110,8 +110,17 @@ def plan_round(
       updated：このラウンドで更新を実行するか。
       eta：周波数利用効率 [bit/s/Hz]。
     """
-    if method not in ("A", "B", "C", "D"):
+    if method not in ("A", "B", "C", "D", "E"):
         raise ValueError("未対応の手法です")
+
+    if method == "E":
+        n = len(comp)
+        return (
+            np.full(n, 3, dtype=int),  # 最深Exit
+            np.full(n, np.nan),       # 帯域割当なし
+            True,                    # 毎ラウンド更新
+            np.full(n, np.nan),       # 周波数利用効率は不使用
+        )
 
     if not math.isfinite(gamma) or gamma <= 0:
         raise ValueError("gammaは有限の正の値が必要です")
