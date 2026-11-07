@@ -12,44 +12,27 @@ import numpy as np
 import pandas as pd
 
 
-METHODS = {
-    "A": ("A: Ideal\nFixed20", "#000000"),
-    "B": ("B: Constrained\nFixed20", "#009E73"),
-    "C": ("C: Fixed10", "#D55E00"),
-    "D": ("D: FedMEM", "#0072B2"),
-}
-
-
-def make_title(directory, alpha):
-    gammas = {}
-
-    # 遅延制約を適用するB・C・Dの設定を確認する。
-    for method in ("B", "C", "D"):
-        path = directory / method / "metadata.json"
-        with path.open(encoding="utf-8") as file:
-            gamma = float(json.load(file)["gamma"])
-
-        if not np.isfinite(gamma) or gamma <= 0:
-            raise ValueError(f"gammaが不正です: {path}")
-
-        gammas[method] = gamma
-
-    if len(set(gammas.values())) != 1:
-        raise ValueError(f"手法間でgammaが異なります: {gammas}")
-
-    gamma = gammas["D"]
-    alpha_tex = "0.5" if alpha == "0.5" else r"10^{10}"
-
-    return (
-        rf"$\alpha={alpha_tex},\ "
-        rf"\gamma={gamma:g}\,\mathrm{{s}}$"
+if __package__:
+    from .plot_common import (
+        METHODS,
+        experiment_directories,
+        make_title,
+        cohort_size,
+    )
+else:
+    from plot_common import (
+        METHODS,
+        experiment_directories,
+        make_title,
+        cohort_size,
     )
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
-    args = parser.parse_args()
+    parser.add_argument("--alpha", choices=("0.5", "1e10"))
+    args = parser.parse_args(argv)
 
     plt.rcParams.update({
         "font.size": 10,
@@ -57,8 +40,9 @@ def main():
         "pdf.fonttype": 42,
     })
 
-    for alpha in ("0.5", "1e10"):
-        directory = args.root / f"alpha_{alpha}"
+    for alpha, directory in experiment_directories(
+        args.root, args.alpha
+    ):
         rates = []
         reference_rounds = None
 
@@ -94,7 +78,7 @@ def main():
                 f"{rate:.2f}%"
             )
 
-        fig, ax = plt.subplots(figsize=(4.8, 3.2))
+        fig, ax = plt.subplots(figsize=(7.6, 4.2))
 
         positions = np.arange(len(METHODS))
         bars = ax.bar(
@@ -122,7 +106,14 @@ def main():
         )
         ax.set_xticks(
             positions,
-            [value[0] for value in METHODS.values()],
+            [
+                "A\nFixed20",
+                "B\nFixed20",
+                "C\nFixed10",
+                "D\nFedMEM",
+                "E\nError Free",
+                "F\nFixed16",
+            ],
         )
         ax.set_yticks([0, 20, 40, 60, 80, 100])
         ax.grid(axis="y", alpha=0.3)

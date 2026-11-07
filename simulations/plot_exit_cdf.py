@@ -10,44 +10,27 @@ import numpy as np
 import pandas as pd
 
 
-METHODS = {
-    "A": ("A: Fixed20 Ideal", "#000000", ":"),
-    "B": ("B: Fixed20 constrained", "#009E73", "-."),
-    "C": ("C: Fixed10", "#D55E00", "--"),
-    "D": ("D: FedMEM", "#0072B2", "-"),
-}
-
-
-def make_title(directory, alpha):
-    gammas = {}
-
-    # 遅延制約を適用するB・C・Dの設定を確認する。
-    for method in ("B", "C", "D"):
-        path = directory / method / "metadata.json"
-        with path.open(encoding="utf-8") as file:
-            gamma = float(json.load(file)["gamma"])
-
-        if not np.isfinite(gamma) or gamma <= 0:
-            raise ValueError(f"gammaが不正です: {path}")
-
-        gammas[method] = gamma
-
-    if len(set(gammas.values())) != 1:
-        raise ValueError(f"手法間でgammaが異なります: {gammas}")
-
-    gamma = gammas["D"]
-    alpha_tex = "0.5" if alpha == "0.5" else r"10^{10}"
-
-    return (
-        rf"$\alpha={alpha_tex},\ "
-        rf"\gamma={gamma:g}\,\mathrm{{s}}$"
+if __package__:
+    from .plot_common import (
+        METHODS,
+        experiment_directories,
+        make_title,
+        cohort_size,
+    )
+else:
+    from plot_common import (
+        METHODS,
+        experiment_directories,
+        make_title,
+        cohort_size,
     )
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
-    args = parser.parse_args()
+    parser.add_argument("--alpha", choices=("0.5", "1e10"))
+    args = parser.parse_args(argv)
 
     plt.rcParams.update({
         "font.size": 10,
@@ -55,12 +38,23 @@ def main():
         "pdf.fonttype": 42,
     })
 
-    for alpha in ("0.5", "1e10"):
-        directory = args.root / f"alpha_{alpha}"
+    for alpha, directory in experiment_directories(
+        args.root, args.alpha
+    ):
         curves = {}
         reference_rounds = None
+        reference_cohort = None
 
         for method in METHODS:
+            cohort = cohort_size(directory, method)
+
+            if reference_cohort is None:
+                reference_cohort = cohort
+            elif cohort != reference_cohort:
+                raise ValueError(
+                    "手法間で参加端末数が異なります"
+                )
+
             path = directory / method / "round_metrics.csv"
             df = pd.read_csv(path)
             df = df[df["round"] > 0].copy()
@@ -97,7 +91,7 @@ def main():
 
             if (
                 not np.isfinite(values).all()
-                or ((values < 10) | (values > 30)).any()
+                or ((values < cohort) | (values > 3 * cohort)).any()
                 or not np.equal(values, np.floor(values)).all()
             ):
                 raise ValueError(f"Exit番号の総和が不正です: {path}")
@@ -106,18 +100,26 @@ def main():
             y = 100.0 * np.cumsum(counts) / len(values)
 
             curves[method] = (
-                np.r_[9, x, 31],
+                np.r_[cohort - 1, x, 3 * cohort + 1],
                 np.r_[0, y, 100],
             )
 
-        if not curves:
-            print(f"alpha={alpha}: CDFの対象データがありません")
-            continue
+        fig, ax = plt.subplots(figsize=(6.4, 4.2))
 
-        fig, ax = plt.subplots(figsize=(4.4, 3.2))
-
-        for method, (x, y) in curves.items():
+        for method in METHODS:
             label, color, style = METHODS[method]
+
+            if method not in curves:
+                ax.plot(
+                    [], [],
+                    color=color,
+                    linestyle=style,
+                    label=f"{label} (no updates)",
+                )
+                continue
+
+            x, y = curves[method]
+
             ax.step(
                 x,
                 y,
@@ -131,15 +133,33 @@ def main():
         title = make_title(directory, alpha)
 
         ax.set(
-            title=title,
+            title=make_title(directory, alpha),
             xlabel="Sum of selected Exit indices",
             ylabel="Empirical CDF (%)",
-            xlim=(9, 31),
+            xlim=(
+                reference_cohort - 1,
+                3 * reference_cohort + 1,
+            ),
             ylim=(0, 100),
         )
-        ax.set_xticks([10, 15, 20, 25, 30])
+
+        ax.set_xticks([
+            reference_cohort,
+            2 * reference_cohort,
+            3 * reference_cohort,
+        ])
+
         ax.grid(alpha=0.3)
-        ax.legend()
+        ax.legend(fontsize=8, ncol=2)
+
+        if not curves:
+            ax.text(
+                0.5, 0.5,
+                "No accepted updates",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+            )
 
         output = directory / "figures"
         output.mkdir(parents=True, exist_ok=True)

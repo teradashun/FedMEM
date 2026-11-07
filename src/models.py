@@ -461,7 +461,7 @@ def eenet34_1525_quarter(num_classes=10):
 def eenet20_half(num_classes=10):
     return EENet20(
         num_classes=num_classes,
-        channels=(8, 16, 32),
+        channels=(16, 16, 32),
     )
 
 MODEL_SPECS = {

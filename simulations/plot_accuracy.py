@@ -12,44 +12,27 @@ import numpy as np
 import pandas as pd
 
 
-METHODS = {
-    "A": ("A: Fixed20 Ideal", "#000000", ":"),
-    "B": ("B: Fixed20 constrained", "#009E73", "-."),
-    "C": ("C: Fixed10", "#D55E00", "--"),
-    "D": ("D: FedMEM", "#0072B2", "-"),
-}
-
-
-def make_title(directory, alpha):
-    gammas = {}
-
-    # 遅延制約を適用するB・C・Dの設定を確認する。
-    for method in ("B", "C", "D"):
-        path = directory / method / "metadata.json"
-        with path.open(encoding="utf-8") as file:
-            gamma = float(json.load(file)["gamma"])
-
-        if not np.isfinite(gamma) or gamma <= 0:
-            raise ValueError(f"gammaが不正です: {path}")
-
-        gammas[method] = gamma
-
-    if len(set(gammas.values())) != 1:
-        raise ValueError(f"手法間でgammaが異なります: {gammas}")
-
-    gamma = gammas["D"]
-    alpha_tex = "0.5" if alpha == "0.5" else r"10^{10}"
-
-    return (
-        rf"$\alpha={alpha_tex},\ "
-        rf"\gamma={gamma:g}\,\mathrm{{s}}$"
+if __package__:
+    from .plot_common import (
+        METHODS,
+        experiment_directories,
+        make_title,
+        cohort_size,
+    )
+else:
+    from plot_common import (
+        METHODS,
+        experiment_directories,
+        make_title,
+        cohort_size,
     )
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
-    args = parser.parse_args()
+    parser.add_argument("--alpha", choices=("0.5", "1e10"))
+    args = parser.parse_args(argv)
 
     plt.rcParams.update({
         "font.size": 10,
@@ -57,8 +40,9 @@ def main():
         "pdf.fonttype": 42,
     })
 
-    for alpha in ("0.5", "1e10"):
-        directory = args.root / f"alpha_{alpha}"
+    for alpha, directory in experiment_directories(
+        args.root, args.alpha
+    ):
         curves = {}
         reference_rounds = None
 
@@ -91,7 +75,7 @@ def main():
 
             curves[method] = (rounds, accuracy)
 
-        fig, ax = plt.subplots(figsize=(4.4, 3.2))
+        fig, ax = plt.subplots(figsize=(6.4, 4.2))
 
         for method, (label, color, style) in METHODS.items():
             rounds, accuracy = curves[method]
@@ -114,7 +98,7 @@ def main():
             ylim=(0, 100),
         )
         ax.grid(alpha=0.3)
-        ax.legend()
+        ax.legend(fontsize=8, ncol=2)
 
         output = directory / "figures"
         output.mkdir(parents=True, exist_ok=True)

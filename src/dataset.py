@@ -108,8 +108,11 @@ def original_indices(dataset):
 
 
 def split_client_tests(
-    train_subsets, test_dataset, *, seed, num_classes=10
+    train_subsets, test_dataset, *, seed, num_classes=10, mode="train_ratio",
 ):
+    if mode not in ("train_ratio", "random"):
+        raise ValueError(f"未対応のテスト分割方式です: {mode}")
+
     if not train_subsets or any(len(s) == 0 for s in train_subsets):
         raise ValueError("学習データが空の端末があります")
 
@@ -128,6 +131,37 @@ def split_client_tests(
     rng = np.random.default_rng(seed)
     assigned = [[] for _ in train_subsets]
     test_counts = np.zeros_like(train_counts)
+    
+    if mode == "random":
+        num_clients = len(train_subsets)
+
+        if len(test_dataset) < num_clients:
+            raise ValueError(
+                "全端末へ配るにはテストデータ数が不足しています"
+            )
+
+        # ラベルを使わず、全インデックスをランダムに並べる。
+        shuffled_indices = rng.permutation(len(test_dataset))
+
+        # 各端末の件数差が最大1になるように分割する。
+        partitions = np.array_split(
+            shuffled_indices, num_clients
+        )
+
+        test_subsets = []
+
+        for i, indices in enumerate(partitions):
+            test_subsets.append(
+                Subset(test_dataset, indices.tolist())
+            )
+
+            # 記録用に、分割後のラベル数を集計する。
+            test_counts[i] = np.bincount(
+                test_labels[indices],
+                minlength=num_classes,
+            )
+
+        return test_subsets, train_counts, test_counts
 
     for c in range(num_classes):
         indices = np.flatnonzero(test_labels == c)

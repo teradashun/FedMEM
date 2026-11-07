@@ -50,47 +50,55 @@ def count_exit_flops(model):
     return measured
 
 
-def make_environment(num_clients, rounds, seed, trial):
+def make_environment(num_clients, rounds, total_bandwidth, seed):
     """距離・チャネル・雑音を学習用乱数と独立に生成する。"""
-    distance_rng = np.random.default_rng(
-        np.random.SeedSequence([seed, trial, 0])
-    )
-    channel_rng = np.random.default_rng(
-        np.random.SeedSequence([seed, trial, 1])
-    )
-    noise_rng = np.random.default_rng(
-        np.random.SeedSequence([seed, trial, 2])
-    )
+    distance_rng = np.random.default_rng(np.random.SeedSequence([seed, 0]))
+    channel_rng = np.random.default_rng(np.random.SeedSequence([seed, 1]))
+    noise_rng = np.random.default_rng(np.random.SeedSequence([seed, 2]))
 
     # 距離は試行開始時に一度だけ生成する
     distances = []
 
     while len(distances) < num_clients:
-        x, y = distance_rng.normal(0.0, 250.0, size=2)
+        x, y = distance_rng.uniform(0.0, 500.0, size=2)
         distance = math.hypot(x, y)
 
         if 35.0 <= distance <= 500.0:
             distances.append(distance)
 
+    TXG = 0 # デバイス側のアンテナ利得[dBi]
+    RXG = 15 # 基地局側のアンテナ利得[dBi]
     distances = np.asarray(distances)
 
     path_loss = (
         128.1 + 37.6 * np.log10(distances / 1000.0)
     )
 
-    # ラウンド・端末ごとにRayleighフェージングを生成する
-    h = (
-        channel_rng.normal(size=(rounds, num_clients))
-        + 1j * channel_rng.normal(size=(rounds, num_clients))
+    # 端末ごとにRayleighフェージングを生成する
+    client_h = (
+        channel_rng.normal(size=(num_clients))
+        + 1j * channel_rng.normal(size=(num_clients))
     ) / math.sqrt(2.0)
 
-    gains = h * 10.0 ** (-path_loss[None, :] / 20.0)
+    h = np.tile(client_h, (rounds, 1))
+
+    gains = h * 10 ** ((-path_loss[None, :] + TXG + RXG) / 20)
 
     # 各ラウンドに1つの共通雑音電力を生成する
-    noise_db = noise_rng.uniform(-3.0, 3.0, size=rounds)
-    noise = 1e-10 * 10.0 ** (noise_db / 10.0)
+    N_psd = -174 # 雑音電力スペクトル密度[dBm/Hh]
+    NF = 5 # 雑音指数[dB]
 
-    return distances, gains, noise
+    sigma_dBm = N_psd + NF + 10*math.log10(total_bandwidth)
+    sigma_w = 10**((sigma_dBm - 30) / 10)
+
+    # 雑音電力の倍率
+    noise_scale = 30.0
+    sigma_w *= noise_scale
+
+    # 全ラウンドで同じ雑音電力を使う配列
+    noises = np.full(rounds, sigma_w, dtype=float)
+
+    return distances, gains, noises
 
 
 def plan_round(
@@ -110,16 +118,16 @@ def plan_round(
       updated：このラウンドで更新を実行するか。
       eta：周波数利用効率 [bit/s/Hz]。
     """
-    if method not in ("A", "B", "C", "D", "E"):
+    if method not in ("A", "B", "C", "D", "E", "F"):
         raise ValueError("未対応の手法です")
 
     if method == "E":
         n = len(comp)
         return (
             np.full(n, 3, dtype=int),  # 最深Exit
-            np.full(n, np.nan),       # 帯域割当なし
-            True,                    # 毎ラウンド更新
-            np.full(n, np.nan),       # 周波数利用効率は不使用
+            np.full(n, np.nan),        # 帯域割当なし
+            True,                      # 毎ラウンド更新
+            np.full(n, np.nan),        # 周波数利用効率は不使用
         )
 
     if not math.isfinite(gamma) or gamma <= 0:
@@ -184,6 +192,9 @@ def plan_round(
 
         elif method == "C":
             choices = np.ones(n, dtype=int)
+        
+        elif method == "F":
+            choices = np.full(n, 2, dtype=int)
 
         else:
             # D：従来のExitを浅くする規則を維持する
