@@ -54,7 +54,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=Path("results/round_flops"),
+        default=Path("results"),
     )
     parser.add_argument(
         "--dry-run",
@@ -81,8 +81,8 @@ def parse_args(argv=None):
 
 
 def print_resource_summary(exits, comp, channels, noises, power, size_bits,
-                           bandwidth_total, plans):
-    """学習前に、全ラウンドの資源割当とgamma境界を確認する。"""
+                           bandwidth_total, plans, selected_clients):
+    """学習前に、各ラウンドの参加端末の資源割当とgamma境界を確認する。"""
     rounds = len(plans)
 
     for index, exit_id in enumerate(exits):
@@ -105,11 +105,12 @@ def print_resource_summary(exits, comp, channels, noises, power, size_bits,
 
     for t in range(rounds):
         row = {"round": t + 1}
+        participants = selected_clients[t]
 
         for index, exit_id in enumerate(exits):
             row[f"gamma_exit{exit_id}_s"] = gamma_boundary(
-                comp_one_exit=comp[:, index],
-                gains=channels[t],
+                comp_one_exit=comp[participants, index],
+                gains=channels[t, participants],
                 noise=float(noises[t]),
                 power=power,
                 size_bits=size_bits,
@@ -140,13 +141,14 @@ def print_resource_summary(exits, comp, channels, noises, power, size_bits,
     ].max()
 
 
-def output_directory(args, seed, ite_num):
-    """1試行なら従来の保存先、複数試行ならseedごとの保存先を返す。"""
+def output_directory(args, seed, ite_num, cohort, num_clients):
+    """分割方式・alpha・参加台数・総台数ごとに保存先を分ける。"""
     root = args.output_root
     if ite_num > 1:
         root = root / f"seed_{seed}"
     alpha_tag = "0.5" if args.alpha == 0.5 else "1e10"
-    return root / f"alpha_{alpha_tag}" / args.method
+    condition = f"{args.test_split}_{alpha_tag}_{cohort}|{num_clients}"
+    return root / condition / args.method
 
 
 def save_split(output, subsets, test_subsets, train_counts, test_counts, seed, test_split):

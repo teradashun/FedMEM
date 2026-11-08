@@ -1,3 +1,15 @@
+# train_ratio、alpha=0.5
+# python -m src.FL --test-split train_ratio --alpha 0.5 --method D --gamma 30
+
+# train_ratio、alpha=1e10
+# python -m src.FL --test-split train_ratio --alpha 1e10 --method D --gamma 30
+
+# random、alpha=0.5
+# python -m src.FL --test-split random --alpha 0.5 --method D --gamma 30
+
+# random、alpha=1e10
+# python -m src.FL --test-split random --alpha 1e10 --method D --gamma 30
+
 import copy
 import os
 import json
@@ -120,12 +132,13 @@ def main(argv=None):
         ]
         print_resource_summary(
             exits, comp, channels, noises, power, size_bits, bandwidth_total, plans,
+            selected_clients,
         )
 
         if args.dry_run:
             continue
 
-        output = output_directory(args, seed, ite_num)
+        output = output_directory(args, seed, ite_num, cohort, num_clients)
         output.mkdir(parents=True, exist_ok=False)
 
         with (output / "metadata.json").open("w", encoding="utf-8") as file:

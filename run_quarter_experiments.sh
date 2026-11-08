@@ -7,9 +7,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 read -rp "gamma [秒]: " GAMMA
 
 SEED=0
-RUN_ROOT="results/all_patterns/$(date +%Y%m%d_%H%M%S_%N)"
+RUN_ROOT="results"
+LOG_ROOT="$RUN_ROOT/$(date)_$$"
+mkdir -p "$LOG_ROOT"
 
-mkdir -p "$RUN_ROOT/logs"
+mkdir -p "$RUN_ROOT"
 
 TOTAL=24
 COUNT=0
@@ -34,7 +36,7 @@ for test_split in train_ratio random; do
                 --seed "$SEED" \
                 --test-split "$test_split" \
                 --output-root "$OUTPUT_ROOT" \
-                2>&1 | tee "$LOG_FILE"
+                2>&1 | tee "$LOG_ROOT/${test_split}_alpha_${alpha}_${method}.log"
         done
     done
 done

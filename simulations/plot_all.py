@@ -1,4 +1,4 @@
-# python3 simulations/plot_all.py   --root results/all_patterns/20261105_052456_112753139
+# python -m simulations.plot_all --root "results/train_ratio_0.5_10|20"
 
 import argparse
 from pathlib import Path
@@ -25,7 +25,7 @@ def main():
         )
 
         options = [
-            "--root", str(directory.parent),
+            "--root", str(directory),
             "--alpha", alpha,
         ]
 

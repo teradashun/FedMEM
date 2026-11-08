@@ -1,5 +1,5 @@
 training:
-  batch_size: 128
+  batch_size: 64
   epochs: 3
   lr: 0.1   # {SGD: 0.1, Adam: 0.001}
   optim_name: SGD   # SGD or Adam
@@ -16,5 +16,4 @@ FL:
 communication:
   total_bandwidth: 40000000
   power_dbm: 23.0  # dbm
-  noise_w: 1.0e-10
   gamma: 30.0
