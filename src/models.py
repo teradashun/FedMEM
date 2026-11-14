@@ -455,7 +455,7 @@ def eenet34_1525_half(num_classes=10):
 def eenet34_1525_quarter(num_classes=10):
     return EENet34Branch1525(
         num_classes=num_classes,
-        channels=(16, 32, 64, 128),
+        channels=(16, 16, 32, 64),
     )
 
 def eenet20_half(num_classes=10):

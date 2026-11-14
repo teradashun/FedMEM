@@ -3,7 +3,7 @@ training:
   epochs: 3
   lr: 0.1   # {SGD: 0.1, Adam: 0.001}
   optim_name: SGD   # SGD or Adam
-  model_name: eenet20_half   # [resnet18, resnet34, eenet34]
+  model_name: eenet20_half   # eenet20_half, eenet20, eenet34_1525, eenet34_1525_half, eenet34_1525_quarter
   dataset_name: CIFAR10   # [MNIST, CIFAR10, CIFAR100]
 
 FL:
@@ -14,6 +14,11 @@ FL:
   cohort: 10
 
 communication:
-  total_bandwidth: 40000000
+  total_bandwidth: 5000000  # 5 MHz
   power_dbm: 23.0  # dbm
-  gamma: 30.0
+  TXG: 0       # デバイス側のアンテナ利得[dBi]
+  RXG: 15      # 基地局側のアンテナ利得[dBi]
+  N_psd: -174  # 雑音電力スペクトル密度[dBm/Hh]
+  NF: 5        # 雑音指数[dB]
+  max_dis: 500
+  min_dis: 35

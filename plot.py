@@ -1,44 +1,45 @@
-#!/usr/bin/env bash
-set -euo pipefail
 
-# このスクリプトが置かれているFedMEMへ移動
-cd "$(dirname "${BASH_SOURCE[0]}")"
+import pandas as pd
+import matplotlib.pyplot as plt
+from pathlib import Path
 
-read -rp "gamma [秒]: " GAMMA
+# ===== 設定 =====
+csv_files = [
+    "csv_data/fedavg_1e10.csv",
+    "csv_data/fedmem_1e10.csv",
+]
 
-SEED=0
-RUN_ROOT="results/all_patterns/$(date +%Y%m%d_%H%M%S_%N)"
+labels = ["fedavg", "error_free"]
+output_path = "accuracy_comparison.png"
 
-mkdir -p "$RUN_ROOT/logs"
+# ===== グラフ作成 =====
+plt.figure(figsize=(8, 5))
 
-TOTAL=24
-COUNT=0
+for file, label in zip(csv_files, labels):
+    df = pd.read_csv(file)
 
-for test_split in train_ratio random; do
-    # 分割方式ごとに出力先を分ける
-    OUTPUT_ROOT="$RUN_ROOT/$test_split"
+    # ラウンド順に並べ替え
+    df = df.sort_values("round")
 
-    for alpha in 0.5 1e10; do
-        for method in A B C D E F; do
-            COUNT=$((COUNT + 1))
+    plt.plot(
+        df["round"],
+        df["accuracy"],
+        marker="o",
+        markersize=3,
+        linewidth=1.8,
+        label=label,
+    )
 
-            LOG_FILE="$RUN_ROOT/logs/${test_split}_alpha_${alpha}_${method}_seed_${SEED}.log"
+plt.xlabel("Communication Round")
+plt.ylabel("Accuracy (%)")
+plt.title("α=0.5")
 
-            echo
-            echo "[$COUNT/$TOTAL] split=$test_split alpha=$alpha method=$method seed=$SEED"
+plt.legend()
+plt.grid(True, linestyle="--", alpha=0.5)
+plt.ylim(0, 100)
+plt.tight_layout()
 
-            python3 -u -m src.FL \
-                --alpha "$alpha" \
-                --method "$method" \
-                --gamma "$GAMMA" \
-                --seed "$SEED" \
-                --test-split "$test_split" \
-                --output-root "$OUTPUT_ROOT" \
-                2>&1 | tee "$LOG_FILE"
-        done
-    done
-done
+# 保存
+plt.savefig(output_path, dpi=300, bbox_inches="tight")
 
-echo
-echo "全${TOTAL}パターンが完了しました。"
-echo "結果保存先: $RUN_ROOT"
+print(f"Saved: {Path(output_path).resolve()}")

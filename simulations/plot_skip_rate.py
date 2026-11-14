@@ -107,12 +107,8 @@ def main(argv=None):
         ax.set_xticks(
             positions,
             [
-                "A\nFixed20",
-                "B\nFixed20",
-                "C\nFixed10",
-                "D\nFedMEM",
-                "E\nError Free",
-                "F\nFixed16",
+                label.replace(": ", "\n", 1)
+                for label, color, style in METHODS.values()
             ],
         )
         ax.set_yticks([0, 20, 40, 60, 80, 100])

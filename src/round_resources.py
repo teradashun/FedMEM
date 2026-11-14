@@ -50,7 +50,8 @@ def count_exit_flops(model):
     return measured
 
 
-def make_environment(num_clients, rounds, total_bandwidth, seed):
+def make_environment(num_clients, rounds, total_bandwidth, seed, 
+        max_dis, min_dis, TXG, RXG, N_psd, NF):
     """距離・チャネル・雑音を学習用乱数と独立に生成する。"""
     distance_rng = np.random.default_rng(np.random.SeedSequence([seed, 0]))
     channel_rng = np.random.default_rng(np.random.SeedSequence([seed, 1]))
@@ -60,14 +61,12 @@ def make_environment(num_clients, rounds, total_bandwidth, seed):
     distances = []
 
     while len(distances) < num_clients:
-        x, y = distance_rng.uniform(0.0, 500.0, size=2)
+        x, y = distance_rng.uniform(0.0, max_dis, size=2)
         distance = math.hypot(x, y)
 
-        if 35.0 <= distance <= 500.0:
+        if min_dis <= distance <= max_dis:
             distances.append(distance)
 
-    TXG = 0 # デバイス側のアンテナ利得[dBi]
-    RXG = 15 # 基地局側のアンテナ利得[dBi]
     distances = np.asarray(distances)
 
     path_loss = (
@@ -84,16 +83,8 @@ def make_environment(num_clients, rounds, total_bandwidth, seed):
 
     gains = h * 10 ** ((-path_loss[None, :] + TXG + RXG) / 20)
 
-    # 各ラウンドに1つの共通雑音電力を生成する
-    N_psd = -174 # 雑音電力スペクトル密度[dBm/Hh]
-    NF = 5 # 雑音指数[dB]
-
     sigma_dBm = N_psd + NF + 10*math.log10(total_bandwidth)
     sigma_w = 10**((sigma_dBm - 30) / 10)
-
-    # 雑音電力の倍率
-    noise_scale = 30.0
-    sigma_w *= noise_scale
 
     # 全ラウンドで同じ雑音電力を使う配列
     noises = np.full(rounds, sigma_w, dtype=float)

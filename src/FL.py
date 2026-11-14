@@ -39,7 +39,7 @@ def main(argv=None):
     os.chdir(root)
     config = load_config(str(root))
 
-    training = config["training"]
+    training        = config["training"]
     fl              = config["FL"]
 
     ite_num         = fl["ite_num"]
@@ -51,15 +51,22 @@ def main(argv=None):
     epochs          = training["epochs"]
     lr              = training["lr"]
     optimizer_name  = training["optim_name"]
+    model_name      = training["model_name"]
 
-    model_name = "eenet20_half"
     spec = MODEL_SPECS[model_name]
     exits = spec["exit_ids"]
     prefixes = spec["shared_prefixes"]
 
     communication = config["communication"]
     bandwidth_total = communication["total_bandwidth"]
+    TXG = communication["TXG"]
+    RXG = communication["RXG"]
+    N_psd = communication["N_psd"]
+    NF = communication["NF"]
+    max_dis = communication["max_dis"]
+    min_dis = communication["min_dis"]
     power = 10.0 ** ((communication["power_dbm"] - 30.0) / 10.0)
+
     cpu_hz = np.asarray([
         (1e9, 2e9, 5e9)[i % 3] for i in range(num_clients)
     ])
@@ -81,6 +88,7 @@ def main(argv=None):
             tensor.numel() * tensor.element_size() * 8
             for tensor in shared_state(global_model, prefixes).values()
         )
+        print(f"共有層のサイズ: {size_bits / 1e6:.2f} Mbit, FLOPs: {flops}")
 
         # 各端末の学習データとテストデータを準備する
         subsets = split_dataset(train_loader.dataset, num_clients, args.alpha)
@@ -116,6 +124,7 @@ def main(argv=None):
         )
         distances, channels, noises = make_environment(
             num_clients, global_rounds, bandwidth_total, seed,
+            max_dis=max_dis, min_dis=min_dis, TXG=TXG, RXG=RXG, N_psd=N_psd, NF=NF,
         )
 
         # 参加端末・Exit・帯域幅を各ラウンドについて決める
@@ -250,33 +259,33 @@ def main(argv=None):
                     global_model, client_states, test_loaders, device, evaluation_exits, prefixes,
                 )
 
-                record_round(
-                history,
-                conditions,
-                seed=seed,
-                global_round=global_round + 1,
-                num_clients=num_clients,
-                exits=exits,
-                comp=comp,
-                distances=distances,
-                cpu_hz=cpu_hz,
-                noises=noises,
-                channels=channels,
-                size_bits=size_bits,
-                plan=plan,
-                participants=participants,
-                evaluation_exits=evaluation_exits,
-                accuracies=last_accuracies,
-                uplink_mses=uplink_mses,
-                method=args.method,
-            )
+            record_round(
+            history,
+            conditions,
+            seed=seed,
+            global_round=global_round + 1,
+            num_clients=num_clients,
+            exits=exits,
+            comp=comp,
+            distances=distances,
+            cpu_hz=cpu_hz,
+            noises=noises,
+            channels=channels,
+            size_bits=size_bits,
+            plan=plan,
+            participants=participants,
+            evaluation_exits=evaluation_exits,
+            accuracies=last_accuracies,
+            uplink_mses=uplink_mses,
+            method=args.method,
+        )
 
-            save_round_metrics(output, history, conditions)
-            status = "更新" if updated else "スキップ"
-            print(
-                f"Round {global_round + 1}/{global_rounds}: {status}, "
-                f"Accuracy={np.mean(last_accuracies):.3f}%"
-            )
+        save_round_metrics(output, history, conditions)
+        status = "更新" if updated else "スキップ"
+        print(
+            f"Round {global_round + 1}/{global_rounds}: {status}, "
+            f"Accuracy={np.mean(last_accuracies):.3f}%"
+        )
 
         # この試行の最終モデルを保存する
         save_checkpoint(

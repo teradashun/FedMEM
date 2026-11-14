@@ -202,7 +202,7 @@ def make_train_loaders(subsets, batch_size, seed, global_round):
         DataLoader(
             subset, batch_size=batch_size, shuffle=True, drop_last=True,
             generator=torch.Generator().manual_seed(
-                1000000 * seed + 1000 * global_round + i
+                seed + global_round + i
             ),
         )
         for i, subset in enumerate(subsets)

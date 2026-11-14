@@ -13,19 +13,16 @@ def average_models(client_updates, num_samples):
     total = sum(num_samples)
     avg_state = {}
 
-    for key in client_updates[0]:
-        values = [update[key] for update in client_updates]
-
-        if values[0].is_floating_point():
-            result = torch.zeros_like(values[0])
-
-            for value, n in zip(values, num_samples):
-                result.add_(value, alpha=n / total)
-
-            avg_state[key] = result
-        else:
-            # 整数バッファは、これまでと同じ最大値の方針
-            avg_state[key] = torch.stack(values).amax(dim=0)
+    for key in client_updates[0].keys():
+        ref = client_updates[0][key]
+        if not torch.is_floating_point(ref):
+            avg_state[key] = ref.detach().clone()
+            continue
+ 
+        acc = ref.detach().clone().float() * num_samples[0]        # clone: 元を壊さない
+        for i in range(1, len(num_samples)):
+            acc = acc + client_updates[i][key].detach().float() * num_samples[i]   # 非 in-place
+        avg_state[key] = acc.to(ref.dtype)
 
     return avg_state
 
